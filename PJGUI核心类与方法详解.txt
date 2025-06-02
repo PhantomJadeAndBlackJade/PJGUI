@@ -1,0 +1,424 @@
+二、核心类与方法详解
+1. FileUtils 类
+用于简化文件操作，提供安全的文件读写、删除、重命名等功能。
+方法：saveText
+作用：安全地将文本内容保存到指定文件。
+详细介绍：第一个参数是待保存的文本内容，第二个参数是目标文件的绝对路径，第三个参数指定是否覆盖已存在的文件。方法会进行路径安全性检查，防止越权访问，若目标文件存在且允许覆盖，则覆盖原文件；若不允许覆盖，则保留原文件。
+使用方法：直接调用该方法，传入相应参数即可。
+使用案例：
+// 保存文本到文件
+boolean success = FileUtils.saveText("Hello, World!", "/user/docs/example.txt", true);
+if (success) {
+    System.out.println("文件保存成功！");
+} else {
+    System.out.println("文件保存失败！");
+}
+方法：delete
+作用：删除指定路径的文件或空目录。
+详细介绍：参数为待删除文件或目录的路径。方法会检查路径是否安全，若安全则尝试删除，删除成功返回 true，否则返回 false。
+使用方法：调用该方法并传入目标路径。
+使用案例：
+// 删除文件
+boolean deleted = FileUtils.delete("/user/docs/temp.txt");
+if (deleted) {
+    System.out.println("文件删除成功！");
+} else {
+    System.out.println("文件删除失败！");
+}
+方法：rename
+作用：重命名文件或目录。
+详细介绍：第一个参数是文件或目录的原路径，第二个参数是新的名称（不包含路径）。方法会对原路径进行安全性检查，并确保新名称符合文件命名规范，然后执行重命名操作，成功返回新文件的完整路径，失败返回 null。
+使用方法：调用时传入原路径和新名称。
+使用案例：
+// 重命名文件
+String newPath = FileUtils.rename("/user/docs/oldname.txt", "newname.txt");
+if (newPath != null) {
+    System.out.println("文件重命名成功，新路径：" + newPath);
+} else {
+    System.out.println("文件重命名失败！");
+}
+2. Components 类
+提供便捷的 UI 组件创建方法，可快速构建常见的 GUI 元素。
+方法：button
+作用：创建一个按钮，并可设置点击事件。
+详细介绍：第一个参数是按钮上显示的文本内容，第二个参数是一个 Runnable 对象，表示按钮被点击时执行的操作。
+使用方法：通过该方法创建按钮对象，然后可将其添加到窗口或其他容器中。
+使用案例：
+// 创建按钮并添加到窗口
+JButton myButton = Components.button("Click Me", () -> {
+    System.out.println("Button clicked!");
+});
+JFrame frame = new JFrame();
+frame.getContentPane().add(myButton);
+frame.pack();
+frame.setVisible(true);
+方法：textField
+作用：创建一个文本输入框，并可设置输入提示文本以及文本变化时的回调。
+详细介绍：第一个参数是文本输入框的提示文本，第二个参数是一个 Consumer 对象，当文本内容发生变化时会触发该回调，传入新的文本内容。
+使用方法：创建文本输入框对象后，可将其添加到 GUI 界面中。
+使用案例：
+// 创建文本输入框并添加到窗口
+JTextField myField = Components.textField("Enter text", text -> {
+    System.out.println("Text changed: " + text);
+});
+JFrame frame = new JFrame();
+frame.getContentPane().add(myField);
+frame.pack();
+frame.setVisible(true);
+方法：gifView
+作用：创建一个用于显示 GIF 动画的标签。
+详细介绍：参数为 GIF 文件的路径，方法会根据路径加载 GIF 动画并显示在一个 JLabel 组件上。
+使用方法：创建 JLabel 对象后，可将其添加到界面中。
+使用案例：
+// 创建显示 GIF 动画的标签并添加到窗口
+JLabel gifLabel = Components.gifView("/resources/animation.gif");
+JFrame frame = new JFrame();
+frame.getContentPane().add(gifLabel);
+frame.pack();
+frame.setVisible(true);
+3. WindowBuilder 类
+用于简化窗口创建和配置，提供链式调用构建窗口界面的功能。
+方法：alwaysOnTop
+作用：设置窗口是否始终位于其他窗口之上。
+详细介绍：参数为布尔值，true 表示窗口始终在最前端，false 表示取消始终在最前端的设置。
+使用方法：在构建窗口时调用该方法并传入相应的布尔值。
+使用案例：
+PJGUI.WindowBuilder window = PJGUI.window("My Window")
+    .alwaysOnTop(true);
+方法：setTransparency
+作用：设置窗口的透明度。
+详细介绍：参数为一个浮点值，范围在 0.0 到 1.0 之间，值越小窗口越透明。
+使用方法：在构建窗口时调用该方法并传入透明度值。
+使用案例：
+PJGUI.WindowBuilder window = PJGUI.window("Transparent Window")
+    .setTransparency(0.5f);
+方法：draggable
+作用：使无边框窗口可拖动。
+详细介绍：无参数，调用后窗口内容区域可响应鼠标拖动事件，实现窗口拖动功能。
+使用方法：在构建无边框窗口时调用该方法。
+使用案例：
+PJGUI.WindowBuilder window = PJGUI.window("Draggable Window")
+    .noBorder()
+    .draggable();
+方法：icon
+作用：设置窗口的图标。
+详细介绍：参数为图标文件的路径，方法会读取文件并将其设置为窗口图标。
+使用方法：在构建窗口时调用该方法并传入图标文件路径。
+使用案例：
+PJGUI.WindowBuilder window = PJGUI.window("Icon Window")
+    .icon("/resources/icon.png");
+方法：withTray
+作用：为窗口添加系统托盘图标。
+详细介绍：第一个参数是托盘图标的图像对象，第二个参数是托盘菜单项列表。调用后会在系统托盘区域显示图标，并可设置右键菜单。
+使用方法：在构建窗口时调用该方法并传入相应的参数。
+使用案例：
+TrayIcon trayIcon = new TrayIcon(ImageIO.read(new File("/resources/tray_icon.png")));
+PopupMenu popup = new PopupMenu();
+MenuItem exitItem = new MenuItem("Exit");
+exitItem.addActionListener(e -> System.exit(0));
+popup.add(exitItem);
+
+PJGUI.WindowBuilder window = PJGUI.window("Tray Window")
+    .withTray(trayIcon, Arrays.asList(exitItem));
+方法：add
+作用：向窗口添加子组件。
+详细介绍：参数为一个 Swing 组件对象，将该组件添加到窗口的内容面板中。
+使用方法：在构建窗口时调用该方法并传入要添加的组件。
+使用案例：
+JButton button = new JButton("Click Me");
+PJGUI.WindowBuilder window = PJGUI.window("Button Window")
+    .add(button);
+方法：show
+作用：显示窗口。
+详细介绍：无参数，调用后窗口会显示在屏幕上。
+使用方法：在窗口构建完成后调用该方法。
+使用案例：
+PJGUI.WindowBuilder window = PJGUI.window("Visible Window");
+window.show();
+4. Events 类
+提供事件处理的便捷方法，简化组件的事件绑定。
+方法：onClick
+作用：为组件绑定点击事件。
+详细介绍：第一个参数是目标组件，第二个参数是一个 Runnable 对象，表示点击事件发生时执行的操作。
+使用方法：直接调用该方法并传入组件和事件处理逻辑。
+使用案例：
+JButton button = new JButton("Click Me");
+PJGUI.Events.onClick(button, () -> {
+    System.out.println("Button clicked!");
+});
+方法：onKey
+作用：为组件绑定键盘按键事件。
+详细介绍：第一个参数是目标组件，第二个参数是按键的键码，第三个参数是一个 Runnable 对象，表示按键事件发生时执行的操作。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+JTextField field = new JTextField();
+PJGUI.Events.onKey(field, KeyEvent.VK_ENTER, () -> {
+    System.out.println("Enter key pressed!");
+});
+方法：onDrop（想起了镁嚎的回忆，几十行代码，几百个错误）
+作用：为组件绑定文件拖放事件。
+详细介绍：第一个参数是目标组件，第二个参数是一个 Consumer 对象，表示拖放文件列表的处理逻辑。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+JComponent dropArea = new JPanel();
+PJGUI.Events.onDrop(dropArea, files -> {
+    System.out.println("Files dropped: " + files);
+});
+方法：autoSubmit
+作用：为文本框组件绑定自动提交事件。
+详细介绍：第一个参数是文本框组件，第二个参数是 API 请求的 URL。当用户在文本框中输入内容并按下回车键时，会自动发送 HTTP GET 请求。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+JTextField searchField = new JTextField();
+PJGUI.Events.autoSubmit(searchField, "https://api.example.com/search");
+5. Net 类（想起了镁嚎的回忆*2）
+提供网络功能，包括 WebSocket 客户端和 HTTP 请求的封装。
+方法：WebSocketClient
+作用：创建 WebSocket 客户端。
+详细介绍：参数为 WebSocket 服务器的 URL。调用后会尝试连接到指定的 WebSocket 服务器。
+使用方法：直接调用该方法并传入服务器 URL。
+使用案例：
+PJGUI.Net.WebSocketClient client = new PJGUI.Net.WebSocketClient("ws://example.com/socket");
+client.setOnMessage(message -> {
+    System.out.println("Received message: " + message);
+});
+方法：httpGet
+作用：发送 HTTP GET 请求。
+详细介绍：第一个参数是请求的 URL，第二个参数是一个 Consumer 对象，用于处理成功响应，第三个参数是一个 Consumer 对象，用于处理请求失败。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+PJGUI.Net.httpGet("https://api.example.com/data", response -> {
+    System.out.println("Response: " + response);
+}, error -> {
+    System.err.println("Error: " + error);
+});
+方法：checkConnectivity
+作用：检查网络连通性。
+详细介绍：参数为一个 Consumer 对象，用于接收网络状态回调。方法会定期检查网络是否可用，并通过回调传递结果。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+PJGUI.Net.checkConnectivity(status -> {
+    System.out.println("Network status: " + (status ? "Connected" : "Disconnected"));
+});
+6. AudioPlayer 类
+提供音频播放功能，支持播放音频文件、控制播放状态、设置音量和速度等。
+方法：AudioPlayer(File audioFile)
+作用：创建音频播放器对象。
+详细介绍：参数为音频文件对象，播放器会加载该文件并准备好播放。
+使用方法：直接调用构造方法并传入音频文件。
+使用案例：
+PJGUI.AudioPlayer player = new PJGUI.AudioPlayer(new File("/resources/music.mp3"));
+player.play();
+方法：play
+作用：开始播放音频。
+详细介绍：无参数，调用后音频会从当前位置开始播放。
+使用方法：直接调用该方法。
+使用案例：
+player.play();//就那么少
+方法：stop
+作用：停止播放音频。
+详细介绍：无参数，调用后音频会停止播放。
+使用方法：直接调用该方法。
+使用案例：
+player.stop();//虽然声音停了，但是还要放miku
+方法：setVolume
+作用：设置音频播放的音量。
+详细介绍：参数为一个浮点值，范围在 0.0 到 1.0 之间，值越大音量越高。
+使用方法：直接调用该方法并传入音量值。
+使用案例：
+player.setVolume(0.5f);
+方法：setSpeed
+作用：设置音频播放的速度。
+详细介绍：参数为一个浮点值，范围在 0.5 到 2.0 之间，值越大播放速度越快。
+使用方法：直接调用该方法并传入速度值。
+使用案例：
+player.setSpeed(1.5f);
+方法：setPitch
+作用：设置音频播放的音调。
+详细介绍：参数为一个浮点值，范围在 0.5 到 2.0 之间，值越大音调越高。
+使用方法：直接调用该方法并传入音调值。
+使用案例：
+player.setPitch(1.2f);
+7. SwingImagePanel 类
+用于显示图像并支持自定义绘制。
+方法：SwingImagePanel(String path, Consumer<Graphics2D> painter)
+作用：创建一个图像面板。
+详细介绍：第一个参数是图像文件的路径，第二个参数是一个 Consumer 对象，用于自定义绘制逻辑。
+使用方法：直接调用构造方法并传入相应的参数。
+使用案例：
+SwingImagePanel imagePanel = new SwingImagePanel("/resources/image.jpg", g -> {
+    g.setColor(Color.RED);
+    g.drawRect(100, 100, 200, 200);
+});
+JFrame frame = new JFrame();
+frame.getContentPane().add(imagePanel);
+frame.pack();
+frame.setVisible(true);
+8. ColorFilter 类
+用于对图像进行颜色调整。
+方法：ColorFilter(float r, float g, float b)
+作用：创建一个颜色调整滤镜。
+详细介绍：参数分别为红色、绿色和蓝色的调整因子，用于改变图像的 RGB 颜色值。
+使用方法：直接调用构造方法并传入调整因子。
+使用案例：
+SwingImagePanel imagePanel = new SwingImagePanel("/resources/image.jpg", g -> {});
+ColorFilter colorFilter = new ColorFilter(1.2f, 0.8f, 1.0f);
+imagePanel.addFilter(colorFilter);
+9. RippleEffect 类
+用于实现波纹效果。
+方法：RippleEffect(double amplitude, double frequency)
+作用：创建一个波纹效果滤镜。
+详细介绍：参数分别为波纹的振幅和频率，用于控制效果的强度和密度。
+使用方法：直接调用构造方法并传入相应的参数。
+使用案例：
+SwingImagePanel imagePanel = new SwingImagePanel("/resources/image.jpg", g -> {});
+RippleEffect rippleEffect = new RippleEffect(2.0, 0.1);
+imagePanel.addFilter(rippleEffect);
+10. Animator 类
+用于实现动画效果。
+方法：fadeIn(Window window, int duration)
+作用：使窗口淡入显示。
+详细介绍：参数分别为目标窗口和动画持续时间（毫秒）。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+JFrame frame = new JFrame();
+frame.setSize(400, 300);
+frame.setVisible(true);
+PJGUI.Animator.fadeIn(frame, 1000);
+11. MemoryMonitor 类
+用于监控内存使用情况。
+方法：startMonitoring()
+作用：开始内存监控。
+详细介绍：无参数，调用后会定期检查内存使用情况并打印信息。
+使用方法：直接调用该方法。
+使用案例：
+PJGUI.MemoryMonitor.startMonitoring();
+12. LeakDetector 类
+用于检测对象是否被垃圾回收。
+方法：LeakDetector(Object obj)
+作用：创建一个内存泄漏检测器。
+详细介绍：参数为要检测的对象。
+使用方法：直接调用构造方法并传入要检测的对象。
+使用案例：
+Object obj = new Object();
+PJGUI.LeakDetector detector = new PJGUI.LeakDetector(obj);
+obj = null; // 释放强引用
+System.gc(); // 提示垃圾回收
+try {
+    Thread.sleep(100); // 等待垃圾回收
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+}
+if (detector.isLeaked()) {
+    System.out.println("对象未被回收，可能存在内存泄漏！");
+} else {
+    System.out.println("对象已被回收，未发现内存泄漏。");
+}
+13. InputDetector 类
+用于检测输入设备的状态。
+方法：startDetection()
+作用：开始检测输入。
+详细介绍：无参数，调用后会开始监听键盘和鼠标事件。
+使用方法：直接调用该方法。
+使用案例：
+PJGUI.InputDetector detector = PJGUI.InputDetector.getInstance();
+detector.startDetection();
+方法：isKeyPressed(int keyCode)
+作用：检查指定按键是否被按下。
+详细介绍：参数为按键的键码。
+使用方法：直接调用该方法并传入按键的键码。
+使用案例：
+if (detector.isKeyPressed(KeyEvent.VK_A)) {
+    System.out.println("A 键被按下");
+}
+14. AudioComponents 类
+提供音频播放器的 UI 组件。
+方法：createController(AudioPlayer player)
+作用：创建音频播放器的控制面板。
+详细介绍：参数为音频播放器对象，方法会创建一个包含播放/暂停按钮、音量滑块、进度条等控件的面板。
+使用方法：直接调用该方法并传入音频播放器对象。
+使用案例：
+PJGUI.AudioPlayer player = new PJGUI.AudioPlayer(new File("/resources/music.mp3"));
+JPanel controller = PJGUI.AudioComponents.createController(player);
+JFrame frame = new JFrame();
+frame.getContentPane().add(controller);
+frame.pack();
+frame.setVisible(true);
+方法：createWaveform(byte[] pcmData, AudioFormat format)
+作用：创建音频波形显示组件。
+详细介绍：参数分别为音频的 PCM 数据和音频格式信息，用于生成波形图。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+byte[] pcmData = new byte[1024];
+// 填充 pcmData 数据
+AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
+JComponent waveform = PJGUI.AudioComponents.createWaveform(pcmData, format);
+JFrame frame = new JFrame();
+frame.getContentPane().add(waveform);
+frame.pack();
+frame.setVisible(true);
+方法：createVolumeMeter(AudioPlayer player)
+作用：创建音量表显示组件。
+详细介绍：参数为音频播放器对象，用于显示当前播放音量。
+使用方法：直接调用该方法并传入音频播放器对象。
+使用案例：
+PJGUI.AudioPlayer player = new PJGUI.AudioPlayer(new File("/resources/music.mp3"));
+JComponent volumeMeter = PJGUI.AudioComponents.createVolumeMeter(player);
+JFrame frame = new JFrame();
+frame.getContentPane().add(volumeMeter);
+frame.pack();
+frame.setVisible(true);
+15. Debug 类
+提供调试工具。
+方法：toggleBorderDebug()
+作用：切换组件边框调试模式。
+详细介绍：无参数，调用后会切换所有组件的边框显示状态，便于调试布局。
+使用方法：直接调用该方法。
+使用案例：
+PJGUI.Debug.toggleBorderDebug();
+16. ExceptionUtils 类
+提供异常处理工具。
+方法：handleError(String message, Exception e)
+作用：处理异常并显示错误信息。
+详细介绍：参数分别为错误信息和异常对象，方法会打印异常堆栈并显示错误对话框。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+try {
+    // 可能抛出异常的代码
+} catch (Exception e) {
+    PJGUI.ExceptionUtils.handleError("发生错误", e);
+}
+17. MathUtils 类
+提供数学运算工具。（闲的没事干搞得）
+方法：clamp(double value, double min, double max)
+作用：限制值在指定范围内。
+详细介绍：参数分别为待限制的值、最小值和最大值，返回限制后的值。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+double result = PJGUI.MathUtils.clamp(5.0, 1.0, 3.0);
+System.out.println(result); // 输出 3.0
+18. Physics 类
+提供物理计算工具。
+方法：isCollisionRectCircle(double rectX, double rectY, double rectWidth, double rectHeight, double circleX, double circleY, double radius)
+作用：检测矩形和圆形是否发生碰撞。
+详细介绍：参数分别为矩形的坐标、尺寸和圆形的坐标、半径，返回碰撞检测结果。
+使用方法：直接调用该方法并传入相应的参数。
+使用案例：
+boolean collision = PJGUI.Physics.isCollisionRectCircle(0, 0, 100, 100, 50, 50, 30);
+System.out.println(collision); // 输出 true
+19. TextNumberConverter 类
+提供文本和数字的转换工具。
+方法：stringToNumber(String str)
+作用：将字符串转换为数字。
+详细介绍：参数为字符串，返回转换后的数字。
+使用方法：直接调用该方法并传入字符串。
+使用案例：
+Long number = PJGUI.TextNumberConverter.stringToNumber("Hello, World!");
+System.out.println(number);
+方法：numberToString(Long num)
+作用：将数字转换为字符串。
+详细介绍：参数为数字，返回转换后的字符串。
+使用方法：直接调用该方法并传入数字。
+使用案例：
+String str = PJGUI.TextNumberConverter.numberToString(1234567890L);
+System.out.println(str);
