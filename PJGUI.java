@@ -1,15 +1,22 @@
-//版本：0.98
-//version:0.98
-//此代码作者是一个二次元宅！
-//The code's author is a anime宅（anime enthusiast）!
-//这是我的第一个J公开的AVA程序，有可以改进的方向请指出
-//This is my first publicly released Java program, and I would like to know where I can make improvements.
-/*你好，这是bilibili黑琼official制作的GUI框架？（存疑）（感觉可以当游戏引擎用）
-这个文件旨在辅助新手理解与使用各种包（存疑），简化 Swing 的复杂性，提供开箱即用的网络与交互功能
-适合需要快速开发 Java 桌面应用且希望减少底层代码的开发者，和JAVA初学者（还有我）使用
-此文件还在开发中，请谨慎使用！*/
+/**
+ * @version 1.00
+ * @author 幻琼_黑琼
+ */
+/*
+  这是 bilibili 幻琼_黑琼 制作的标准库 GUI 框架（后面会出外置库版），全称Phantom Jade GUI Revised standard，也可作为游戏引擎使用。(GUI：Graphical User Interface)
+  该文件旨在帮助新手理解与使用各种 Java 包，简化 Swing 的复杂性，并提供开箱即用的网络与交互功能。
+  适合需要快速开发 Java 桌面应用的开发者以及 Java 初学者使用。
+  注意：此文件仍在开发中，请谨慎使用！
+  如果看到抽象的注释就当没看见吧······这是我的风格
+ */
 package PJG;//如果你有包，那么把这个包名称改为你的包名称，如果没有，就删掉此行
 
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import javax.imageio.ImageIO;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -34,8 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
+import java.security.*;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.*;
@@ -43,9 +49,593 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;//老长一堆import，可以看出来，我花了很多精力
 
-public class PJGUI {
+public class PJGRS {
+    // 物理线程配置
+    public static final PhysicsEngine.PhysicsWorld physicsWorld = new PhysicsEngine.PhysicsWorld();
+    private static final ScheduledExecutorService physicsExecutor =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "Physics-Thread");
+                t.setDaemon(true);
+                t.setPriority(Thread.MAX_PRIORITY);
+                return t;
+            });
+
+
+    public static void startPhysicsSimulation() {
+        physicsExecutor.scheduleAtFixedRate(() ->
+                physicsWorld.update(1/60f), 0, 16, TimeUnit.MILLISECONDS);
+    }
+
+
+    public static class PhysicsEngine {
+        public static class MagneticSystem {
+            public static final float BASE_MAGNETIC_FORCE = 50f;
+            public final Map<BodyPart, MagneticProperties> magneticObjects = new ConcurrentHashMap<>();
+
+            public static class MagneticProperties {
+                public float strength; // 磁力强度（正值为吸引，负值为排斥）
+                public float range;    // 磁力作用范围
+                public Vector2f polarization; // 磁极方向向量
+
+                public MagneticProperties(float strength, float range, Vector2f polarization) {
+                    this.strength = strength;
+                    this.range = range;
+                    this.polarization = polarization;
+                }
+            }
+
+            public void applyMagneticForces(PhysicsWorld world) {
+                magneticObjects.forEach((source, sourceProps) -> {
+                    magneticObjects.forEach((target, targetProps) -> {
+                        if (source != target) {
+                            Vector2f direction = Vector2f.sub(target.position, source.position);
+                            float distance = direction.length();
+
+                            if (distance > 0 && distance < sourceProps.range + targetProps.range) {
+                                // 计算磁力方向：同极相斥，异极相吸
+                                float polarityFactor = sourceProps.polarization.dot(targetProps.polarization) > 0 ? -1f : 1f;
+                                float forceMagnitude = polarityFactor * BASE_MAGNETIC_FORCE *
+                                        (sourceProps.strength * targetProps.strength) /
+                                        (distance * distance);
+
+                                Vector2f force = direction.normalized().mul(forceMagnitude);
+                                target.applyForce(force);
+                            }
+                        }
+                    });
+                });
+            }
+        }
+        public static class PhysicsWorld {
+
+
+            // 环境参数
+            public float airDensity = 1.2f;
+            public float dragCoefficient = 0.47f;
+
+            // 游戏对象管理
+            public final PlayerManager playerManager = new PlayerManager();
+            public final List<Obstacle> obstacles = new CopyOnWriteArrayList<>();
+            public final CollisionResolver collisionResolver = new CollisionResolver();
+
+            // 表面材质配置
+            public enum SurfaceMaterial {
+                ICE(0.05f, 0.8f),
+                GRASS(0.6f, 0.3f),
+                METAL(0.8f, 0.1f),
+                AIR(0.01f, 0.0f);
+
+                public final float friction;
+                public final float restitution;
+
+                SurfaceMaterial(float f, float r) {
+                    friction = f;
+                    restitution = r;
+                }
+            }
+
+            // 障碍物定义
+            public static class Obstacle {
+                public final Line2D shape;
+                public SurfaceMaterial material;
+
+                public Obstacle(Line2D line, SurfaceMaterial mat) {
+                    shape = line;
+                    material = mat;
+                }
+            }
+
+            public void update(float deltaTime) {
+                Vector2f gravity = new Vector2f(0, 9.8f);
+                playerManager.getAllPlayers().forEach(player -> {
+                    player.bodyParts.values().forEach(part -> {
+                        part.applyForce(gravity.mul(part.mass));
+                    });
+                });
+
+                // 更新玩家（顺序不变）
+                playerManager.getAllPlayers().forEach(player -> {
+                    player.update(deltaTime);
+                });
+
+                // 碰撞检测和响应
+                collisionResolver.processCollisions(this);
+            }
+
+            // 允许外部添加障碍物
+            public void addObstacle(Obstacle obstacle) {
+                obstacles.add(obstacle);
+            }
+
+            // 允许外部移除障碍物
+            public void removeObstacle(Obstacle obstacle) {
+                obstacles.remove(obstacle);
+            }
+        }
+
+        public static class PlayerManager {
+            private final ConcurrentHashMap<Integer, Player> players = new ConcurrentHashMap<>();
+            private final AtomicInteger idCounter = new AtomicInteger(0);
+
+            public int createPlayer() {
+                int newId = idCounter.incrementAndGet();
+                players.put(newId, new Player(newId));
+                return newId;
+            }
+
+            public List<Player> getAllPlayers() {
+                return new ArrayList<>(players.values());
+            }
+
+            // 允许外部移除角色
+            public void removePlayer(int playerId) {
+                players.remove(playerId);
+            }
+        }
+
+        public static class Player {
+            public static final float BASE_SIZE = 30.0f;
+
+            public final int id;
+            public Vector2f position = new Vector2f();
+            public Vector2f velocity = new Vector2f();
+            public Vector2f appliedForce = new Vector2f();
+            public float mass = 70.0f;
+            public float scale = 1.0f;
+
+            private Map<String, BodyPart> bodyParts = new HashMap<>();
+            private List<Joint> joints = new ArrayList<>();
+
+            public Player(int id) {
+                this.id = id;
+                initializeDefaultBodyParts();
+            }
+
+            private void initializeDefaultBodyParts() {
+                // 创建头部
+                BodyPart head = new BodyPart(0, -15, 5.0f, 10.0f, "head");
+                bodyParts.put("head", head);
+
+                // 创建躯干
+                BodyPart torso = new BodyPart(0, 0, 10.0f, 15.0f, "torso");
+                bodyParts.put("torso", torso);
+
+                // 创建左臂
+                BodyPart leftArm = new BodyPart(-10, 0, 3.0f, 8.0f, "left_arm");
+                bodyParts.put("left_arm", leftArm);
+
+                // 创建右臂
+                BodyPart rightArm = new BodyPart(10, 0, 3.0f, 8.0f, "right_arm");
+                bodyParts.put("right_arm", rightArm);
+
+                // 创建左腿
+                BodyPart leftLeg = new BodyPart(-5, 15, 7.0f, 12.0f, "left_leg");
+                bodyParts.put("left_leg", leftLeg);
+
+                // 创建右腿
+                BodyPart rightLeg = new BodyPart(5, 15, 7.0f, 12.0f, "right_leg");
+                bodyParts.put("right_leg", rightLeg);
+
+                // 连接关节
+                createJoint("head", "torso", 0, -5, 0, 5);
+                createJoint("torso", "left_arm", -5, 0, 5, 0);
+                createJoint("torso", "right_arm", 5, 0, -5, 0);
+                createJoint("torso", "left_leg", -2, 10, 2, -10);
+                createJoint("torso", "right_leg", 2, 10, -2, -10);
+            }
+
+            private void createJoint(String partA, String partB, float ax, float ay, float bx, float by) {
+                BodyPart a = bodyParts.get(partA);
+                BodyPart b = bodyParts.get(partB);
+                Joint joint = new Joint(a, b);
+                joint.anchorPointA.set(ax, ay);
+                joint.anchorPointB.set(bx, by);
+                joints.add(joint);
+                a.connectedJoints.add(joint);
+                b.connectedJoints.add(joint);
+            }
+
+            public void update(float deltaTime) {
+                // 1. 先更新关节约束
+                joints.forEach(joint -> joint.update(deltaTime));
+
+                // 2. 再更新身体部位（添加约束力应用）
+                bodyParts.values().forEach(part -> {
+                    part.update(deltaTime);
+                });
+
+                // 更新角色位置
+                position.set(bodyParts.get("torso").position);
+            }
+
+
+            // 允许外部访问和修改身体部位
+            public BodyPart getBodyPart(String partName) {
+                return bodyParts.get(partName);
+            }
+
+            // 允许外部添加新的身体部位
+            public void addBodyPart(String name, BodyPart part) {
+                bodyParts.put(name, part);
+            }
+
+            // 允许外部移除身体部位
+            public void removeBodyPart(String partName) {
+                bodyParts.remove(partName);
+            }
+
+            // 允许外部施加力
+            public void applyForceToPart(String partName, Vector2f force) {
+                BodyPart part = bodyParts.get(partName);
+                if (part != null) {
+                    part.applyForce(force);
+                }
+            }
+
+            // 允许外部直接设置身体部位的位置
+            public void setBodyPartPosition(String partName, Vector2f position) {
+                BodyPart part = bodyParts.get(partName);
+                if (part != null) {
+                    part.position.set(position);
+                }
+            }
+        }
+
+        public static class BodyPart {
+            private MagneticSystem.MagneticProperties magneticProperties;
+            public Vector2f position = new Vector2f();
+            public Vector2f velocity = new Vector2f();
+            public Vector2f force = new Vector2f();
+            public float mass;
+            public float size;
+            public String type;
+            public List<Joint> connectedJoints = new ArrayList<>();
+            public void setMagneticProperties(float strength, float range, Vector2f polarization) {
+                this.magneticProperties = new MagneticSystem.MagneticProperties(strength, range, polarization);
+            }
+
+            public MagneticSystem.MagneticProperties getMagneticProperties() {
+                return magneticProperties;
+            }
+
+            public BodyPart(float x, float y, float mass, float size, String type) {
+                this.position.x = x;
+                this.position.y = y;
+                this.mass = mass;
+                this.size = size;
+                this.type = type;
+            }
+            public void applyForce(Vector2f force) {
+                this.force = this.force.add(force);
+            }
+            public void update(float deltaTime) {
+                // 计算加速度
+                float accelerationX = force.x / mass;
+                float accelerationY = force.y / mass;
+
+                // 更新速度
+                velocity.x += accelerationX * deltaTime;
+                velocity.y += accelerationY * deltaTime;
+
+                // 更新位置
+                position.x += velocity.x * deltaTime;
+                position.y += velocity.y * deltaTime;
+
+                // 更新后清除施加的力
+                force.set(0, 0);
+            }
+
+            // 允许外部访问和修改属性
+            public Vector2f getPosition() {
+                return position;
+            }
+
+            public void setPosition(Vector2f position) {
+                this.position.set(position);
+            }
+
+            public Vector2f getVelocity() {
+                return velocity;
+            }
+
+            public void setVelocity(Vector2f velocity) {
+                this.velocity.set(velocity);
+            }
+
+            public Vector2f getForce() {
+                return force;
+            }
+
+            public void setForce(Vector2f force) {
+                this.force.set(force);
+            }
+
+            public float getMass() {
+                return mass;
+            }
+
+            public void setMass(float mass) {
+                this.mass = mass;
+            }
+
+            public float getSize() {
+                return size;
+            }
+
+            public void setSize(float size) {
+                this.size = size;
+            }
+
+            public String getType() {
+                return type;
+            }
+
+            public void setType(String type) {
+                this.type = type;
+            }
+
+            public List<Joint> getConnectedJoints() {
+                return connectedJoints;
+            }
+        }
+        public static class Joint {
+            public BodyPart bodyPartA;
+            public BodyPart bodyPartB;
+            public Vector2f anchorPointA = new Vector2f();
+            public Vector2f anchorPointB = new Vector2f();
+            public float minRotation = -Float.MAX_VALUE;
+            public float maxRotation = Float.MAX_VALUE;
+            public float targetRotation = 0.0f;
+            public float motorSpeed = 0.0f;
+
+            public Joint(BodyPart a, BodyPart b) {
+                this.bodyPartA = a;
+                this.bodyPartB = b;
+            }
+            
+            public void update(float deltaTime) {
+                // 计算两个身体部位之间的当前角度
+                Vector2f toB = Vector2f.sub(bodyPartB.position, bodyPartA.position);
+                float currentRotation = (float) Math.toDegrees(Math.atan2(toB.y, toB.x));
+
+                // 应用旋转约束
+                if (currentRotation < minRotation || currentRotation > maxRotation) {
+                    // 施加矫正力使其回到旋转限制范围内
+                    float correction = 0.0f;
+                    if (currentRotation < minRotation) correction = minRotation - currentRotation;
+                    if (currentRotation > maxRotation) correction = maxRotation - currentRotation;
+
+                    // 施加转矩（简化版）
+                    applyRotationalForce(bodyPartA, correction * 0.1f);
+                    applyRotationalForce(bodyPartB, -correction * 0.1f);
+                }
+
+                // 如果设置了马达速度，则应用该速度
+                if (motorSpeed != 0.0f) {
+                    applyRotationalForce(bodyPartA, motorSpeed * deltaTime);
+                }
+
+                // 更新目标旋转（如果已设置）
+                if (targetRotation != 0.0f) {
+                    float diff = targetRotation - currentRotation;
+                    applyRotationalForce(bodyPartA, diff * 0.1f);
+                }
+            }
+
+            private void applyRotationalForce(BodyPart part, float torque) {
+                // 简化的旋转力应用
+                Vector2f forceDir = new Vector2f(
+                        (float) -Math.sin(Math.toRadians(torque)),
+                        (float) Math.cos(Math.toRadians(torque))
+                );
+                part.applyForce(forceDir.mul(torque));
+            }
+
+            // 允许外部访问和修改属性
+            public void setBodyPartA(BodyPart bodyPartA) {
+                this.bodyPartA = bodyPartA;
+            }
+
+            public void setBodyPartB(BodyPart bodyPartB) {
+                this.bodyPartB = bodyPartB;
+            }
+
+            public void setAnchorPointA(Vector2f anchorPointA) {
+                this.anchorPointA.set(anchorPointA);
+            }
+
+            public void setAnchorPointB(Vector2f anchorPointB) {
+                this.anchorPointB.set(anchorPointB);
+            }
+
+            public void setMinRotation(float minRotation) {
+                this.minRotation = minRotation;
+            }
+
+            public void setMaxRotation(float maxRotation) {
+                this.maxRotation = maxRotation;
+            }
+
+            public void setTargetRotation(float targetRotation) {
+                this.targetRotation = targetRotation;
+            }
+
+            public void setMotorSpeed(float motorSpeed) {
+                this.motorSpeed = motorSpeed;
+            }
+        }
+
+        public static class CollisionResolver {
+            public void processCollisions(PhysicsWorld world) {
+                List<Player> players = world.playerManager.getAllPlayers();
+
+                // 角色与角色之间的碰撞
+                for (int i = 0; i < players.size(); i++) {
+                    for (int j = i + 1; j < players.size(); j++) {
+                        Player a = players.get(i);
+                        Player b = players.get(j);
+
+                        // 检查所有身体部位之间的碰撞
+                        for (BodyPart partA : a.bodyParts.values()) {
+                            for (BodyPart partB : b.bodyParts.values()) {
+                                resolveBodyPartCollision(partA, partB);
+                            }
+                        }
+                    }
+                }
+                // 角色与障碍物之间的碰撞
+                players.forEach(player ->
+                        world.obstacles.forEach(obs ->
+                                player.bodyParts.values().forEach(part ->
+                                        detectAndHandleObstacleCollision(part, obs)
+                                )
+                        )
+                );
+            }
+
+            public void resolveBodyPartCollision(BodyPart a, BodyPart b) {
+                Vector2f direction = Vector2f.sub(b.position, a.position);
+                if (direction.length() == 0) return; // 防止零向量
+                Vector2f collisionNormal = direction.normalized();
+                float relativeSpeed = Vector2f.sub(b.velocity, a.velocity).dot(collisionNormal);
+                float impulse = (2 * relativeSpeed) / (1/a.mass + 1/b.mass);
+
+                a.velocity = a.velocity.add(collisionNormal.mul(impulse / a.mass));
+                b.velocity = Vector2f.sub(b.velocity, collisionNormal.mul(impulse / b.mass));
+            }
+
+            public void detectAndHandleObstacleCollision(BodyPart part, PhysicsWorld.Obstacle obs) {
+                // 简化的线段交点检查，用于演示
+                double[] intersection = LineSegmentIntersector.calculateIntersection(
+                        part.position.x, part.position.y,
+                        part.position.x + part.size, part.position.y + part.size,
+                        obs.shape.getX1(), obs.shape.getY1(),
+                        obs.shape.getX2(), obs.shape.getY2()
+                );
+
+                if (intersection != null) {
+                    Vector2f normal = calculateSurfaceNormal(obs.shape);
+                    float bounceFactor = obs.material.restitution;
+
+                    Vector2f velocityAlongNormal = normal.mul(part.velocity.dot(normal));
+                    part.velocity = Vector2f.sub(part.velocity, velocityAlongNormal.mul(1 + bounceFactor));
+                }
+            }
+
+            public Vector2f calculateSurfaceNormal(Line2D line) {
+                double dx = line.getX2() - line.getX1();
+                double dy = line.getY2() - line.getY1();
+                return new Vector2f((float)-dy, (float)dx).normalized();
+            }
+        }
+
+        // 二维向量类
+        public static class Vector2f {
+            public void addi(Vector2f o) {
+                x += o.x;
+                y += o.y;
+            }
+
+            public float x, y;
+
+            public Vector2f() {
+                this(0, 0);
+            }
+
+            public Vector2f(float x, float y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            public Vector2f add(Vector2f o) {
+                return new Vector2f(x + o.x, y + o.y);
+            }
+
+            public static Vector2f sub(Vector2f a, Vector2f b) {
+                return new Vector2f(a.x - b.x, a.y - b.y);
+            }
+
+            public Vector2f mul(float s) {
+                return new Vector2f(x * s, y * s);
+            }
+
+            public Vector2f div(float s) {
+                return s == 0 ? new Vector2f() : new Vector2f(x / s, y / s);
+            }
+
+            public float length() {
+                return (float) Math.sqrt(x * x + y * y);
+            }
+
+            public float lengthSq() {
+                return x * x + y * y;
+            }
+
+            public Vector2f normalized() {
+                float len = length();
+                return len > 0 ? div(len) : new Vector2f();
+            }
+
+            public float dot(Vector2f o) {
+                return x * o.x + y * o.y;
+            }
+
+            public void set(float x, float y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            public void set(Vector2f v) {
+                this.x = v.x;
+                this.y = v.y;
+            }
+        }
+
+        // 线段交点计算工具类
+        public static class LineSegmentIntersector {
+            public static double[] calculateIntersection(
+                    double x1, double y1,
+                    double x2, double y2,
+                    double x3, double y3,
+                    double x4, double y4) {
+                // 线段交点计算逻辑
+                // 这里简化实现，实际应用中可以使用更健壮的算法
+                double det = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+                if (det == 0) return null; // 线段平行
+
+                double t = ((y3 - y1) * (x4 - x3) - (x3 - x1) * (y4 - y3)) / det;
+                double u = ((y3 - y1) * (x2 - x1) - (x3 - x1) * (y2 - y1)) / det;
+
+                if (t > 0 && t < 1 && u > 0 && u < 1) {
+                    return new double[]{x1 + t * (x2 - x1), y1 + t * (y2 - y1)};
+                }
+                return null;
+            }
+        }
+    }
     // 文件操作工具类（视奸你的文件，BV号BV1qDUPYKEzf，方便我随取随用）
     public static final class FileUtils {
         private FileUtils() {} // 禁止实例化
@@ -57,11 +647,9 @@ public class PJGUI {
                 if (!isPathAllowed(target)) {
                     throw new SecurityException("禁止访问此路径");
                 }
-
                 if (target.exists() && !override) {
                     return false;
                 }
-
                 Files.write(target.toPath(), content.getBytes(StandardCharsets.UTF_8));
                 return true;
             } catch (IOException | SecurityException e) {
@@ -580,7 +1168,7 @@ public class PJGUI {
                     writer.println("Connection: Upgrade");
                     writer.println("Sec-WebSocket-Key: " + key);
                     writer.println("Sec-WebSocket-Version: 13");
-                    writer.println("Origin: " + uri.getScheme() + "://" + uri.getHost()); // 新增origin头
+                    writer.println("Origin: " + uri.getScheme() + "://" + uri.getHost());
                     writer.println();
                     // 不要关闭writer（关掉术力口），保持流打开
 
@@ -1784,7 +2372,7 @@ public class PJGUI {
             return (r << 16) | (g << 8) | b;
         }
 
-        // 关闭线程池（放miku）我喜欢写注释怎么着你了
+        // 关闭线程池（放miku）我喜欢写注释和miku、镜音、teto、gumi、怎么着你了
         public void dispose() {
             executor.shutdown();
         }
@@ -3051,6 +3639,124 @@ public class PJGUI {
         }
     }
     //往GUI框架里塞我蒸馏后的往年的物理引擎和常用的数学运算，我简直是“天（sha）才（bi）”（没有抽象注释的原因）来都来了，再加个动画引擎怎么样...不对，好像已经加了
+    // 加密工具类（冰红茶加密术，由黑琼制作，miku和幻琼监修）
+    public final class CryptoUtils {
+        private CryptoUtils() {} // 禁止实例化（冰红茶禁止直接饮用）
+
+        // 对称加密算法（AES-GCM模式，安全又高效）（类似.z删ip）
+        public static byte[] aesEncrypt(byte[] data, SecretKey key) throws GeneralSecurityException, IOException {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            byte[] iv = generateSecureIV(12); // 12字节IV（GCM标准）
+            cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(128, iv));
+
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            output.write(iv);
+            output.write(cipher.doFinal(data));
+            return output.toByteArray();
+        }
+
+        public static byte[] aesDecrypt(byte[] encryptedData, SecretKey key) throws GeneralSecurityException {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            byte[] iv = Arrays.copyOfRange(encryptedData, 0, 12);
+            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
+
+            return cipher.doFinal(encryptedData, 12, encryptedData.length - 12);
+        }
+
+        // 生成高强度AES密钥（256位）（添加.z删ip里的删）
+        public static SecretKey generateAESKey() throws NoSuchAlgorithmException {
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+            keyGen.init(256, SecureRandom.getInstanceStrong()); // 用安全随机数
+            return keyGen.generateKey();
+        }
+
+        // 非对称加密（RSA-OAEP，避免经典漏洞）（类似.jpg.png）
+        public static byte[] rsaEncrypt(byte[] data, PublicKey publicKey) throws GeneralSecurityException {
+            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+            return cipher.doFinal(data);
+        }
+
+        public static byte[] rsaDecrypt(byte[] encryptedData, PrivateKey privateKey) throws GeneralSecurityException {
+            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+            cipher.init(Cipher.DECRYPT_MODE, privateKey);
+            return cipher.doFinal(encryptedData);
+        }
+
+        public static String keyToString(Key key) {
+            return Base64.getEncoder().encodeToString(key.getEncoded());
+        }
+
+        public static SecretKey loadAESKey(String base64Key) {
+            byte[] decoded = Base64.getDecoder().decode(base64Key);
+            return new SecretKeySpec(decoded, "AES");
+        }
+
+        private static byte[] generateSecureIV(int ivLength) throws NoSuchAlgorithmException {
+            byte[] iv = new byte[ivLength];
+            SecureRandom.getInstanceStrong().nextBytes(iv);
+            return iv;
+        }
+
+        // 快捷加密文件（冰红茶文件保险柜）//（（类似.z删ip.删）
+        public static void encryptFile(File input, File output, SecretKey key) throws IOException, GeneralSecurityException {
+            byte[] fileData = Files.readAllBytes(input.toPath());
+            byte[] encrypted = aesEncrypt(fileData, key);
+            Files.write(output.toPath(), encrypted);
+        }
+
+        // 快捷解密文件（打开冰红茶保险柜）（类似重命名）
+        public static void decryptFile(File input, File output, SecretKey key) throws IOException, GeneralSecurityException {
+            byte[] encryptedData = Files.readAllBytes(input.toPath());
+            byte[] decrypted = aesDecrypt(encryptedData, key);
+            Files.write(output.toPath(), decrypted);
+        }
+
+        public static JButton createEncryptButton(Supplier<File> fileSupplier) {
+            return Components.button("🔒 加密文件", () -> {
+                File inputFile = fileSupplier.get(); // 通过supplier获取待加密文件
+                if (inputFile == null || !inputFile.exists()) {
+                    JOptionPane.showMessageDialog(null, "请选择有效的文件！");
+                    return;
+                }
+
+                // 创建保存按钮（用于选择加密后文件的保存位置）
+                FileUtils.createSaveButton(selectedFile -> {
+                    try {
+                        SecretKey key = generateAESKey();
+                        encryptFile(inputFile, selectedFile, key);
+                        // 保存密钥到文件
+                        String keyPath = selectedFile.getPath() + ".key";
+                        FileUtils.saveText(CryptoUtils.keyToString(key), keyPath, true);
+                        JOptionPane.showMessageDialog(null, "加密完成！密钥已保存至: " + keyPath);
+                    } catch (Exception e) {
+                        ExceptionUtils.handleError("加密失败", e);
+                    }
+                }).doClick(); // 模拟点击保存按钮
+            });
+        }
+    }
+    public static class PerformanceMonitor {
+        private static final Map<String, Long> timings = new ConcurrentHashMap<>();
+
+        public static void startSection(String name) {
+            timings.put(name, System.nanoTime());
+        }
+
+        public static void endSection(String name) {
+            long start = timings.getOrDefault(name, System.nanoTime());
+            long duration = System.nanoTime() - start;
+            System.out.printf("[Profiler] %s took %.3f ms\n", name, duration / 1_000_000.0);
+        }
+
+        public static void monitorPhysicsWorld() {
+            physicsExecutor.scheduleAtFixedRate(() -> {
+                startSection("PhysicsUpdate");
+                physicsWorld.update(1/60f);
+                endSection("PhysicsUpdate");
+            }, 0, 16, TimeUnit.MILLISECONDS);
+        }
+    }
 }
 //希望你调出适合你喝的冰红茶，听适合听的术
 //try {
